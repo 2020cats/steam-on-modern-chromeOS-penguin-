@@ -1,1 +1,63 @@
-.
+#!/bin/bash
+
+echo "----------------------------------------------------------------"
+echo "1. Crostini without LXD containers (#crostini-containerless) --> enable"
+echo "2. Crostini GPU Support (#crostini-gpu-support) --> enable"
+echo "3. Debian version for new Crostini containers --> defaut"
+echo "If you can:-----------------------------------------------------"
+echo "4. Vulkan (#enable-vulkan) --> enable"
+echo "----------------------------------------------------------------"
+
+
+echo "Start install"
+
+sudo apt update && sudo apt upgrade
+sudo dpkg --add-architecture i386
+sudo apt install mesa-vulkan-drivers mesa-vulkan-drivers:i386 vulkan-tools libvulkan1 libvulkan1:i386 libvulkan-dev libvulkan-dev:i386 -
+
+mkdir -p ~/.config/systemd/user/cros-garcon.service.d/
+
+for file in /usr/share/vulkan/icd.d/*; do
+
+    filename=$(basename "$file")
+    
+    if [[ "$filename" == virtio* ]]; then
+        newLine="VK_ICD_FILENAMES=$file"
+
+        echo "Found file: $filename"
+        
+        
+        sudo sed -i '/VK_ICD_FILENAMES=/d' /etc/environment
+        echo "VK_ICD_FILENAMES=$file" | sudo tee -a /etc/environment > /dev/null
+
+        sudo sed  -i "/VK_ICD_FILENAMES=/d" ~/.bashrc
+        echo "VK_ICD_FILENAMES=$file" >> ~/.bashrc
+
+        cat <<EOF > ~/.config/systemd/user/cros-garcon.service.d/vulkan.conf
+[Service]
+Environment="VK_ICD_FILENAMES=$file"
+Environment="VK_INSTANCE_LAYERS=VK_LAYER_MESA_device_select"
+EOF
+        break 
+    fi
+done
+
+sudo sed  -i "/VK_INSTANCE_LAYERS=/d" /etc/environment
+echo "VK_INSTANCE_LAYERS=VK_LAYER_MESA_device_select" | sudo tee -a /etc/environment > /dev/null
+
+sed -i "/VK_INSTANCE_LAYERS=/d" ~/.bashrc
+echo "export VK_INSTANCE_LAYERS=VK_LAYER_MESA_device_select" >> ~/.bashrc
+
+systemctl --user daemon-reload
+systemctl --user restart cros-garcon.service
+
+echo "install Steam and Dependencies"
+
+sudo apt install adwaita-icon-theme-legacy oss-compat lm-sensors:i386 pipewire:i386 \
+pocl-opencl-icd:i386  mesa-opencl-icd:i386 steam:i386
+
+echo "----------------------------------------------------------------"
+echo "Setup Complete."
+echo "1. Look for 'Install Steam' in your app drawer and launch it."
+echo "2. If it hangs, run 'pkill -9 -f steam' and then type 'steam' in this terminal."
+echo "----------------------------------------------------------------"
